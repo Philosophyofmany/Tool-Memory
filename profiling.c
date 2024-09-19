@@ -1,14 +1,13 @@
 #include "profiling.h"
+#include "user_code.h"
 #include <x86intrin.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
-#define ARRAY_SIZE 32 * 1024 * 1024 // 32 MB
-
-volatile char *array;
+volatile char *array;  // Global array, type matches declaration in profiling.h
 
 uint64_t rdtsc_start() {
-    return __rdtsc(); // Read Time Stamp Counter
+    return __rdtsc();
 }
 
 uint64_t rdtsc_end() {
@@ -22,17 +21,16 @@ void initialize_memory(size_t size) {
         exit(1);
     }
     for (size_t i = 0; i < size; i++) {
-        array[i] = (char)(i & 0xFF); // Initialize array with some values
+        array[i] = (char)(i & 0xFF);
     }
 }
 
 double measure_read_latency(size_t size) {
     uint64_t start, end, total_cycles = 0;
-    volatile char temp;
 
     for (size_t i = 0; i < size; i++) {
         start = rdtsc_start();
-        temp = array[i];
+        volatile char temp = array[i]; // Read value
         end = rdtsc_end();
         total_cycles += (end - start);
     }
@@ -40,12 +38,13 @@ double measure_read_latency(size_t size) {
     return (double)total_cycles / size;
 }
 
+
 double measure_write_latency(size_t size) {
     uint64_t start, end, total_cycles = 0;
 
     for (size_t i = 0; i < size; i++) {
         start = rdtsc_start();
-        array[i] = (char)(i & 0xFF); // Write values
+        array[i] = (char)(i & 0xFF);
         end = rdtsc_end();
         total_cycles += (end - start);
     }
