@@ -13,6 +13,8 @@ double measure_read_latency(size_t size);
 double measure_write_latency(size_t size);
 void set_cpu_affinity(int core_id);
 void verify_cpu_affinity();
+double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size);
+void measure_maximum_bandwidth(size_t total_size);
 
 // Consistent declaration with user_code.c
 void profile_user_code(const char *arg);

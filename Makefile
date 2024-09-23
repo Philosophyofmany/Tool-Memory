@@ -1,10 +1,11 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
+LIBS = -lpapi  # Link with the PAPI library
 
 all: profiler
 
 profiler: main.o profiling.o user_code.o
-	$(CC) $(CFLAGS) -o profiler main.o profiling.o user_code.o
+	$(CC) $(CFLAGS) -o profiler main.o profiling.o user_code.o $(LIBS)  # Link against PAPI
 
 main.o: main.c profiling.h user_code.h
 	$(CC) $(CFLAGS) -c main.c
