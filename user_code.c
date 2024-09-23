@@ -6,6 +6,8 @@ extern volatile char *array;  // Declare array as external
 
 void profile_user_code(const char *user_program) {
     size_t size = 1024 * 1024; // Example size: 1MB
+    set_cpu_affinity(0);
+    verify_cpu_affinity();
 
     // Initialize memory for profiling
     initialize_memory(size);

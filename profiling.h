@@ -11,6 +11,8 @@ extern volatile char *array;  // Global array
 void initialize_memory(size_t size);
 double measure_read_latency(size_t size);
 double measure_write_latency(size_t size);
+void set_cpu_affinity(int core_id);
+void verify_cpu_affinity();
 
 // Consistent declaration with user_code.c
 void profile_user_code(const char *arg);
