@@ -11,6 +11,7 @@ int main(int argc, char **argv) {
 
         set_cpu_affinity(0);
         verify_cpu_affinity();
+        get_cpu_frequency();
 
         // Print the header for latencies and bandwidth
         printf("Array Size (Bytes)\tRead Latency (Cycles)\tWrite Latency (Cycles)\n");

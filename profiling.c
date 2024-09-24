@@ -15,6 +15,28 @@ uint64_t rdtsc_start() {
     return __rdtsc();
 }
 
+void get_cpu_frequency() {
+    FILE *fp;
+    char buffer[256];
+    double cpu_mhz = 0.0;
+
+    // Open the /proc/cpuinfo file
+    fp = fopen("/proc/cpuinfo", "r");
+    if (fp == NULL) {
+        perror("Failed to open /proc/cpuinfo");
+        return;
+    }
+
+    // Read through the file to find the "cpu MHz" entry
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        if (sscanf(buffer, "cpu MHz : %lf", &cpu_mhz) == 1) {
+            printf("CPU Frequency: %.2f MHz\n", cpu_mhz);
+            break; // Stop after finding the first entry
+        }
+    }
+
+    fclose(fp);
+}
 
 void set_cpu_affinity(int cpu_id) {
     cpu_set_t cpu_set;
@@ -67,10 +89,12 @@ void initialize_memory(size_t size) {
     }
 }
 
+
 double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size) {
     uint64_t start, end;
     uint64_t total_cycles = 0;
-    size_t iterations = 10;  // Number of iterations for averaging
+    double cpu_frequency = 1.8e9;
+    size_t iterations = 100;  // Number of iterations for averaging
     volatile char temp;
 
     // Calculate read and write counts based on the specified ratio
@@ -82,6 +106,7 @@ double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size
         for (size_t i = 0; i < total_size; i += block_size) {
             for (size_t j = 0; j < read_count; j++) {
                 temp = array[i + j];  // Warm-up read operation
+                (void)temp;  // Suppress unused variable warning
             }
             for (size_t j = 0; j < write_count; j++) {
                 array[i + j] = (char)((i + j) & 0xFF);  // Warm-up write operation
@@ -91,11 +116,13 @@ double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size
 
     // Start measuring cycles
     start = rdtsc_start();
+    // printf("[DEBUG] Start cycle count: %lu\n", start); //debug statement
     for (size_t iter = 0; iter < iterations; iter++) {
         for (size_t i = 0; i < total_size; i += block_size) {
             // Perform reads
             for (size_t j = 0; j < read_count; j++) {
                 temp = array[i + j];  // Read operation
+                (void)temp;  // Suppress unused variable warning
             }
 
             // Perform writes
@@ -105,18 +132,26 @@ double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size
         }
     }
     end = rdtsc_end();
+    // printf("[DEBUG] End cycle count: %lu\n", end);  // Debug statement
 
     // Calculate the total time in cycles
     total_cycles = end - start;
+    // printf("[DEBUG] Total cycles: %lu\n", total_cycles);  // Debug statement
 
     // Total data accessed in bytes
-    double data_accessed = (double)(total_size * iterations);
+    // double data_accessed = (double)(total_size * iterations);
+    double data_accessed = (double)((read_count + write_count) * iterations * (total_size / block_size));
+
 
     // Calculate bandwidth in bytes per second
-    double bandwidth = data_accessed / (total_cycles / (double)CLOCKS_PER_SEC); // Convert cycles to seconds
+    // double bandwidth = data_accessed / (total_cycles / (double)CLOCKS_PER_SEC); // Convert cycles to seconds
+
+
+    double bandwidth = data_accessed / (total_cycles / cpu_frequency);
 
     return bandwidth;  // Bandwidth in bytes per second
 }
+
 
 void measure_maximum_bandwidth(size_t total_size) {
     size_t granularities[] = {64, 256, 1024};  // 64B, 256B, 1024B
@@ -149,6 +184,10 @@ void measure_maximum_bandwidth(size_t total_size) {
         }
     }
 }
+
+
+
+
 double measure_read_latency(size_t size) {
     uint64_t start, end, total_cycles = 0;
     volatile char temp;
