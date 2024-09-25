@@ -5,12 +5,14 @@
 extern volatile char *array;  // Declare array as external
 
 void profile_user_code(const char *user_program) {
-    size_t size = 1024 * 1024; // Example size: 1MB
+    size_t size = 1024 * 1024 * 16; // Example size: 1MB
+
     set_cpu_affinity(0);
     verify_cpu_affinity();
 
     // Initialize memory for profiling
     initialize_memory(size);
+    measure_bandwidth_with_queue(size, 0.7, size, 50);
 
     // Measure latencies before execution
     double read_latency_before = measure_read_latency(size);

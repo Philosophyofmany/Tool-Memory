@@ -15,7 +15,7 @@ uint64_t rdtsc_start() {
     return __rdtsc();
 }
 
-void get_cpu_frequency() {
+double get_cpu_frequency() {
     FILE *fp;
     char buffer[256];
     double cpu_mhz = 0.0;
@@ -24,19 +24,21 @@ void get_cpu_frequency() {
     fp = fopen("/proc/cpuinfo", "r");
     if (fp == NULL) {
         perror("Failed to open /proc/cpuinfo");
-        return;
+        return 0.0; // Return 0 on failure
     }
 
     // Read through the file to find the "cpu MHz" entry
     while (fgets(buffer, sizeof(buffer), fp) != NULL) {
         if (sscanf(buffer, "cpu MHz : %lf", &cpu_mhz) == 1) {
-            printf("CPU Frequency: %.2f MHz\n", cpu_mhz);
-            break; // Stop after finding the first entry
+            fclose(fp);
+            return cpu_mhz * 1e6; // Convert MHz to Hz
         }
     }
 
     fclose(fp);
+    return 0.0; // Return 0 if not found
 }
+
 
 void set_cpu_affinity(int cpu_id) {
     cpu_set_t cpu_set;
@@ -93,9 +95,18 @@ void initialize_memory(size_t size) {
 double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size) {
     uint64_t start, end;
     uint64_t total_cycles = 0;
-    double cpu_frequency = 1.8e9;
+    double cpu_frequency = get_cpu_frequency(); // Get the CPU frequency dynamically
+    // // Print the CPU frequency
+    // printf("CPU Frequency: %.2f GHz\n", cpu_frequency / 1e9);
     size_t iterations = 100;  // Number of iterations for averaging
     volatile char temp;
+    char *array = malloc(total_size); // Allocate memory for the array
+
+    // Check if allocation succeeded
+    if (array == NULL) {
+        perror("Failed to allocate memory");
+        return 0.0; // Return 0 on failure
+    }
 
     // Calculate read and write counts based on the specified ratio
     size_t read_count = (size_t)(read_ratio * block_size);
@@ -116,7 +127,6 @@ double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size
 
     // Start measuring cycles
     start = rdtsc_start();
-    // printf("[DEBUG] Start cycle count: %lu\n", start); //debug statement
     for (size_t iter = 0; iter < iterations; iter++) {
         for (size_t i = 0; i < total_size; i += block_size) {
             // Perform reads
@@ -132,32 +142,27 @@ double measure_bandwidth(size_t block_size, double read_ratio, size_t total_size
         }
     }
     end = rdtsc_end();
-    // printf("[DEBUG] End cycle count: %lu\n", end);  // Debug statement
 
     // Calculate the total time in cycles
     total_cycles = end - start;
-    // printf("[DEBUG] Total cycles: %lu\n", total_cycles);  // Debug statement
 
     // Total data accessed in bytes
-    // double data_accessed = (double)(total_size * iterations);
     double data_accessed = (double)((read_count + write_count) * iterations * (total_size / block_size));
 
-
-    // Calculate bandwidth in bytes per second
-    // double bandwidth = data_accessed / (total_cycles / (double)CLOCKS_PER_SEC); // Convert cycles to seconds
-
-
+    // Calculate bandwidth in bytes per second using the dynamic CPU frequency
     double bandwidth = data_accessed / (total_cycles / cpu_frequency);
 
+    free(array); // Free the allocated memory
     return bandwidth;  // Bandwidth in bytes per second
 }
-
 
 void measure_maximum_bandwidth(size_t total_size) {
     size_t granularities[] = {64, 256, 1024};  // 64B, 256B, 1024B
     double ratios[] = {1.0, 0.0, 0.7, 0.5};    // Read: 100%, Write: 0%, 70:30, 50:50
     const char* ratio_labels[] = {"Read-only", "Write-only", "70:30 (R:W)", "50:50 (R:W)"};
-
+    double cpu_frequency = get_cpu_frequency();
+    // Print the CPU frequency
+    printf("CPU Frequency: %.2f GHz\n", cpu_frequency / 1e9); // Convert Hz to GHz
     printf("Granularity\tRatio\t\tBandwidth (Gbps)\tRead Latency (Cycles)\tWrite Latency (Cycles)\n");
     printf("------------------------------------------------------------------------------------------------------------------\n");
 
@@ -174,7 +179,7 @@ void measure_maximum_bandwidth(size_t total_size) {
             }
             double bandwidth_gbps = (bandwidth_bytes_per_second * 8) / 1e9;  // Convert to Gbps
 
-            // Measure latencies (implementations should be defined)
+            // Measure latencies
             double read_latency = measure_read_latency(granularities[i]);
             double write_latency = measure_write_latency(granularities[i]);
 
@@ -184,9 +189,6 @@ void measure_maximum_bandwidth(size_t total_size) {
         }
     }
 }
-
-
-
 
 double measure_read_latency(size_t size) {
     uint64_t start, end, total_cycles = 0;
@@ -223,4 +225,123 @@ double measure_write_latency(size_t size) {
     _mm_mfence();  // Memory barrier after the loop
 
     return (double)total_cycles / size;
+}
+
+double measure_bandwidth_with_queue(size_t block_size, double read_ratio, size_t total_size, size_t queue_depth) {
+    uint64_t start, end;
+    uint64_t total_cycles = 0;
+    double cpu_frequency = get_cpu_frequency();  // Get actual CPU frequency
+    size_t iterations = 100;  // Number of iterations for averaging
+    volatile char temp;
+
+    // Calculate read and write counts based on the specified ratio
+    size_t read_count = (size_t)(read_ratio * block_size);
+    size_t write_count = block_size - read_count;
+
+    printf("Measuring bandwidth for block size: %zuB, read ratio: %.2f, queue depth: %zu\n", block_size, read_ratio, queue_depth);
+    printf("Read count: %zu, Write count: %zu\n", read_count, write_count);
+
+    // Simulate multiple outstanding requests by splitting work into 'queue_depth' parts
+    printf("Starting warm-up phase...\n");
+    for (size_t q = 0; q < queue_depth; q++) {
+        for (size_t i = 0; i < total_size; i += block_size) {
+            for (size_t j = 0; j < read_count; j++) {
+                temp = array[i + j];  // Warm-up read operation
+                (void)temp;
+            }
+            for (size_t j = 0; j < write_count; j++) {
+                array[i + j] = (char)((i + j) & 0xFF);  // Warm-up write operation
+            }
+        }
+    }
+
+    // Start measuring cycles
+    printf("Starting measurement phase...\n");
+    start = rdtsc_start();
+    for (size_t iter = 0; iter < iterations; iter++) {
+        // Perform reads and writes in a loop
+        for (size_t i = 0; i < total_size; i += block_size) {
+            for (size_t j = 0; j < read_count; j++) {
+                temp = array[i + j];  // Read operation
+                (void)temp;
+            }
+            for (size_t j = 0; j < write_count; j++) {
+                array[i + j] = (char)((i + j) & 0xFF);  // Write operation
+            }
+        }
+    }
+    end = rdtsc_end();
+    total_cycles = end - start;
+
+    // Calculate data accessed and bandwidth
+    double data_accessed = (double)((read_count + write_count) * iterations * (total_size / block_size));
+    double bandwidth = data_accessed / (total_cycles / cpu_frequency);
+    double bandwidth_gbps = (bandwidth * 8) / 1e9;  // Convert bytes/s to Gbps
+
+    printf("Total cycles: %lu, Data accessed: %.2f bytes\n", total_cycles, data_accessed);
+    printf("Bandwidth: %.2f GBps (%.2f Gbps)\n", bandwidth / 1e9, bandwidth_gbps);
+
+    return bandwidth;
+}
+
+void multiply_and_measure(size_t array_size) {
+    // Allocate memory for the array
+    double *array = malloc(array_size * sizeof(double));
+    if (!array) {
+        perror("Failed to allocate memory");
+        return;
+    }
+
+    // Initialize the array with some values
+    for (size_t i = 0; i < array_size; i++) {
+        array[i] = (double)(i + 1);
+    }
+
+    // Initialize PAPI
+    int retval = PAPI_library_init(PAPI_VERSION);
+    if (retval != PAPI_VER_CURRENT) {
+        fprintf(stderr, "PAPI library init error!\n");
+        free(array);
+        return;
+    }
+
+    // Declare variables to hold PAPI event values
+    long long values[2]; // First for cache misses, second for cache hits
+    int event_set = PAPI_NULL;
+
+    // Create an event set
+    PAPI_create_eventset(&event_set);
+
+    // Add cache miss event (PAPI_L1_DCM for Level 1 Data Cache Miss)
+    PAPI_add_event(event_set, PAPI_L1_DCM);
+    // Optionally, add another event for cache hits
+    PAPI_add_event(event_set, PAPI_L1_DCM);
+
+    // Start counting events
+    PAPI_start(event_set);
+
+    // Start the timer
+    clock_t start_time = clock();
+
+    // Perform light computations (multiplications)
+    double result = 1.0;
+    for (size_t i = 0; i < array_size; i++) {
+        result *= array[i];  // Multiply each element
+    }
+
+    // Stop counting events
+    PAPI_stop(event_set, values);
+
+    // Stop the timer
+    clock_t end_time = clock();
+    double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
+
+    // Print the results
+    printf("Array Size: %zu bytes, Execution Time: %.6f seconds, Result: %.2f, Cache Misses: %lld\n",
+           array_size * sizeof(double), elapsed_time, result, values[0]);
+
+    // Cleanup
+    PAPI_cleanup_eventset(event_set);
+    PAPI_destroy_eventset(&event_set);
+    free(array);
 }

@@ -39,6 +39,10 @@ int main(int argc, char **argv) {
             // Measure maximum bandwidth with detailed granularity and ratios
             measure_maximum_bandwidth(size);
 
+            multiply_and_measure(size);
+
+            // measure_bandwidth_with_queue(size, 0.5, size, 4);
+
             // Free the array after each test
             free((void*)array);
             array = NULL;  // Avoid dangling pointer
