@@ -306,7 +306,7 @@ void multiply_and_measure(size_t array_size) {
     }
 
     // Declare variables to hold PAPI event values
-    long long values[2]; // First for cache misses, second for cache hits
+    long long values[4]; // For cache misses and TLB misses
     int event_set = PAPI_NULL;
 
     // Create an event set
@@ -314,8 +314,9 @@ void multiply_and_measure(size_t array_size) {
 
     // Add cache miss event (PAPI_L1_DCM for Level 1 Data Cache Miss)
     PAPI_add_event(event_set, PAPI_L1_DCM);
-    // Optionally, add another event for cache hits
-    PAPI_add_event(event_set, PAPI_L1_DCM);
+    // Add TLB miss events
+    PAPI_add_event(event_set, PAPI_TLB_DM); // Data TLB misses
+    PAPI_add_event(event_set, PAPI_TLB_IM); // Instruction TLB misses
 
     // Start counting events
     PAPI_start(event_set);
@@ -337,8 +338,10 @@ void multiply_and_measure(size_t array_size) {
     double elapsed_time = (double)(end_time - start_time) / CLOCKS_PER_SEC;
 
     // Print the results
-    printf("Array Size: %zu bytes, Execution Time: %.6f seconds, Result: %.2f, Cache Misses: %lld\n",
-           array_size * sizeof(double), elapsed_time, result, values[0]);
+    printf("Array Size: %zu bytes, Execution Time: %.6f seconds, Result: %.2f, "
+           "Cache Misses: %lld, Data TLB Misses: %lld, Instruction TLB Misses: %lld\n",
+           array_size * sizeof(double), elapsed_time, result,
+           values[0], values[1], values[2]);
 
     // Cleanup
     PAPI_cleanup_eventset(event_set);
