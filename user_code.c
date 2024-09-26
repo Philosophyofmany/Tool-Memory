@@ -26,7 +26,6 @@ void profile_user_code(const char *user_program) {
 
     // Print system information
     printf("\n=== System Information ===\n");
-    // printf("CPU Frequency: %.2f GHz\n", cpu_freq);
     printf("Cache Size: %zu bytes\n", cache_size);
     printf("Main Memory Size: %zu bytes\n", memory_size);
 
@@ -60,6 +59,34 @@ void profile_user_code(const char *user_program) {
     printf("\n=== After Execution ===\n");
     printf("Read Latency: %.2f cycles\n", read_latency_after);
     printf("Write Latency: %.2f cycles\n", write_latency_after);
+
+    // Call the bandwidth measurement function with different queue depths
+    size_t block_size = 64;  // Example block size
+    double read_ratio = 0.7; // Example read ratio
+    size_t total_size = size; // Using the same size as the initial profiling
+
+    printf("\n=== Measuring Bandwidth for Different Queue Depths ===\n");
+    double previous_bandwidth = 0.0;
+    size_t contention_queue_depth = 0;
+
+    for (size_t queue_depth = 1; queue_depth <= 20; queue_depth *= 2) {
+        printf("Testing with Queue Depth: %zu\n", queue_depth);
+        double bandwidth = measure_bandwidth_with_queue(block_size, read_ratio, total_size, queue_depth);
+
+        // Check for contention
+        if (queue_depth > 1 && bandwidth < previous_bandwidth) {
+            contention_queue_depth = queue_depth;
+            printf("Contention detected at Queue Depth: %zu\n", queue_depth);
+            break; // Exit loop after detecting contention
+        }
+
+        previous_bandwidth = bandwidth;
+    }
+
+    // If contention was never detected, output a message
+    if (contention_queue_depth == 0) {
+        printf("No contention detected in the tested queue depths.\n");
+    }
 
     // Free allocated memory
     free((void*)array);

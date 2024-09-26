@@ -413,10 +413,6 @@ double measure_cache_latency(size_t size, double cpu_freq) {
 
 
 
-
-
-
-
 // Measure main memory latency
 double measure_memory_latency(size_t size, double cpu_freq) {
     volatile char *array = malloc(size);
