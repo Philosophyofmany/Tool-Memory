@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
-LIBS = -lpapi  # Link with the PAPI library
+LIBS = -lpapi
 
 all: profiler
 

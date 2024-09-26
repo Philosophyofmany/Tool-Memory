@@ -225,6 +225,7 @@ double measure_write_latency(size_t size) {
     _mm_mfence();  // Memory barrier after the loop
 
     return (double)total_cycles / size;
+
 }
 
 double measure_bandwidth_with_queue(size_t block_size, double read_ratio, size_t total_size, size_t queue_depth) {
@@ -347,4 +348,105 @@ void multiply_and_measure(size_t array_size) {
     PAPI_cleanup_eventset(event_set);
     PAPI_destroy_eventset(&event_set);
     free(array);
+}
+
+size_t get_cache_size() {
+    // Get cache size in bytes (L1 cache for example)
+    long l1_cache_size = sysconf(_SC_LEVEL1_DCACHE_SIZE); // L1 data cache size
+    return (size_t)l1_cache_size;
+}
+
+size_t get_memory_size() {
+    // Get total system memory size in bytes
+    long total_memory = sysconf(_SC_PHYS_PAGES) * sysconf(_SC_PAGE_SIZE); // Total memory
+    return (size_t)total_memory;
+}
+
+
+uint64_t measure_rdtsc_overhead() {
+    uint64_t start, end;
+    start = __rdtsc();
+    end = __rdtsc();
+    return end - start;  // Overhead in cycles
+}
+
+
+// Measure cache memory latency
+double measure_cache_latency(size_t size, double cpu_freq) {
+    volatile char *array = NULL;  // Declare array only once
+
+    // Allocate aligned memory
+    if (posix_memalign((void **)&array, 64, size) != 0) {
+        perror("Failed to allocate memory");
+        exit(1);
+    }
+
+    // Initialize the array
+    for (size_t i = 0; i < size; i++) {
+        array[i] = (char)(i & 0xFF);
+    }
+
+    uint64_t overhead = measure_rdtsc_overhead();
+
+    // Measure latency
+    uint64_t start, end;
+    double total_time = 0.0;
+
+    // Warm-up loop (linear access for cache)
+    for (size_t i = 0; i < size; i++) {
+        (void)array[i];
+    }
+
+    // Timing access
+    for (size_t i = 0; i < size; i++) {
+        start = __rdtsc();
+        (void)array[i];
+        end = __rdtsc();
+        total_time += (end - start - overhead);  // Subtract overhead
+    }
+
+    free((void *)array);
+
+    // Convert cycles to nanoseconds
+    return (total_time / size) * (1e9 / cpu_freq);  // Average latency in ns
+}
+
+
+
+
+
+
+
+// Measure main memory latency
+double measure_memory_latency(size_t size, double cpu_freq) {
+    volatile char *array = malloc(size);
+    if (array == NULL) {
+        perror("Failed to allocate memory");
+        return -1;
+    }
+
+    // Initialize the array
+    for (size_t i = 0; i < size; i++) {
+        array[i] = (char)(i & 0xFF);
+    }
+
+    uint64_t start, end;
+    double total_time_ns = 0.0;
+
+    // Warm-up loop
+    for (size_t i = 0; i < size; i++) {
+        (void)array[rand() % size]; // Random access to warm the memory
+    }
+
+    // Timing random access
+    for (size_t i = 0; i < size; i++) {
+        size_t index = rand() % size; // Random index
+        start = __rdtsc();
+        (void)array[index]; // Access to measure latency
+        end = __rdtsc();
+        total_time_ns += (end - start) * (1e9 / cpu_freq);
+    }
+
+    free((void *)array);
+    return total_time_ns / size; // Return average latency in nanoseconds
 }
